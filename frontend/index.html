@@ -126,6 +126,44 @@
         <p class="empty-sub">Select a contact or generate an invite to open an encrypted session.</p>
       </div>
 
+      <!-- Onboarding (nenhum peer ainda) -->
+      <div id="onboarding-state" class="hidden">
+        <div class="onboarding-wrap">
+          <div class="onboarding-logo">
+            <svg class="brand-icon brand-icon-lg" viewBox="0 0 28 28" fill="none">
+              <path d="M14 2C8.48 2 4 6.48 4 12v13l2.5-2.5L9 25l2.5-2.5L14 25l2.5-2.5L19 25l2.5-2.5L24 25V12C24 6.48 19.52 2 14 2z"
+                    stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+              <circle cx="10" cy="13" r="1.5" fill="currentColor"/>
+              <circle cx="18" cy="13" r="1.5" fill="currentColor"/>
+            </svg>
+            <div class="onboarding-title">UMBRA</div>
+            <div class="brand-sub">CANAL ENCRIPTADO</div>
+          </div>
+
+          <div class="onboarding-card">
+            <div class="label-xs">SEU ENDEREÇO</div>
+            <code class="identity-id onboarding-id" id="onboarding-id-display">——————————</code>
+            <button class="icon-btn onboarding-copy-btn" id="onboarding-copy-btn" title="Copiar">
+              <svg viewBox="0 0 16 16" fill="none">
+                <rect x="5.5" y="5.5" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="1.3"/>
+                <path d="M3.5 10.5V4A1.5 1.5 0 0 1 5 2.5h6.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+              </svg>
+            </button>
+            <p class="onboarding-hint">Compartilhe seu endereço com um amigo para que ele gere um invite.</p>
+          </div>
+
+          <button class="primary-btn onboarding-btn-p" id="onboarding-resolve-btn">
+            ENTRAR COM INVITE CODE
+          </button>
+
+          <div class="onboarding-sep">ou</div>
+
+          <button class="ghost-btn onboarding-btn-g" id="onboarding-create-btn">
+            GERAR INVITE
+          </button>
+        </div>
+      </div>
+
       <div id="chat-view" class="hidden">
 
         <header id="chat-header">

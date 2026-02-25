@@ -498,6 +498,43 @@ class App {
     }
     // Status online virá via presence:online_list e presence:online eventos
     this.#chatUI.renderPeerList();
+
+    // Mostrar onboarding se não há peers
+    if (!allPeers || allPeers.length === 0) {
+      this.#showOnboarding(myID);
+    } else {
+      document.getElementById('empty-state').classList.remove('hidden');
+    }
+  }
+
+  #showOnboarding(myID) {
+    document.getElementById('empty-state').classList.add('hidden');
+    const ob = document.getElementById('onboarding-state');
+    ob.classList.remove('hidden');
+    document.getElementById('onboarding-id-display').textContent = myID;
+
+    document.getElementById('onboarding-copy-btn')?.addEventListener('click', () => {
+      navigator.clipboard.writeText(myID);
+      this.#toast.show('Endereço copiado');
+    });
+    document.getElementById('onboarding-resolve-btn')?.addEventListener('click', () => {
+      this.#inviteUI.showResolveForm();
+    });
+    document.getElementById('onboarding-create-btn')?.addEventListener('click', () => {
+      this.#bus.emit('invite:create', null);
+    });
+  }
+
+  #hideOnboarding(firstPeerID) {
+    const ob = document.getElementById('onboarding-state');
+    ob.classList.add('onboarding-dissolve');
+    ob.addEventListener('animationend', () => {
+      ob.classList.add('hidden');
+      ob.classList.remove('onboarding-dissolve');
+      // Selecionar o primeiro peer automaticamente
+      this.#bus.emit('peer:selected', firstPeerID);
+      document.getElementById('empty-state').classList.remove('hidden');
+    }, { once: true });
   }
 
   #bindBus() {
@@ -632,6 +669,7 @@ class App {
 
     E('invite:token', data => this.#inviteUI.showToken(data));
     E('invite:accepted', peer => {
+      const isFirst = this.#store.getAllPeers().length === 0;
       this.#store.upsertPeer(peer.user_id, {
         nickname: peer.nickname || '',
         hasSession: peer.has_session,
@@ -640,6 +678,7 @@ class App {
       this.#chatUI.renderPeerList();
       const name = this.#store.getDisplayName(peer.user_id);
       this.#toast.show('Contato adicionado: ' + name);
+      if (isFirst) this.#hideOnboarding(peer.user_id);
     });
 
     E('capsule:ready', ({ id, sender_id }) => this.#toast.show(`Capsule ready from ${sender_id}`));

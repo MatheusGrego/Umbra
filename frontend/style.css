@@ -1547,6 +1547,82 @@ body {
   }
 }
 
+/* ── Onboarding ──────────────────────────────────────────────────────── */
+#onboarding-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+}
+#onboarding-state.hidden { display: none; }
+
+.onboarding-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  max-width: 340px;
+  width: 100%;
+  padding: 32px 24px;
+}
+
+.brand-icon-lg {
+  width: 48px;
+  height: 48px;
+  color: var(--accent);
+}
+
+.onboarding-title {
+  font-family: var(--font-mono);
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: var(--t100);
+  margin-top: 8px;
+}
+
+.onboarding-card {
+  width: 100%;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-rim);
+  border-radius: var(--radius-card);
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  position: relative;
+  text-align: center;
+}
+
+.onboarding-id {
+  font-size: 13px;
+  word-break: break-all;
+  color: var(--accent);
+}
+
+.onboarding-copy-btn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+}
+
+.onboarding-hint {
+  font-size: 11px;
+  color: var(--t40);
+  line-height: 1.5;
+}
+
+.onboarding-sep {
+  font-size: 11px;
+  color: var(--t20);
+  letter-spacing: 0.08em;
+}
+
+.onboarding-btn-p,
+.onboarding-btn-g {
+  width: 100%;
+}
+
 /* ── Nickname edit ───────────────────────────────────────────────────── */
 .chat-peer-name-row {
   display: flex;

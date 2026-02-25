@@ -30,6 +30,8 @@ const errMsg = e => (e instanceof Error ? e.message : String(e)) || 'unknown err
 class WailsBridge {
   async getMyID() { return window.go?.main?.App?.GetMyID?.() ?? 'dev-0000000'; }
   async getOnlinePeers() { return window.go?.main?.App?.GetOnlinePeers?.() ?? []; }
+  async getAllPeers() { return window.go?.main?.App?.GetAllPeers?.() ?? []; }
+  async setNickname(userID, nickname) { return window.go?.main?.App?.SetNickname?.(userID, nickname); }
   async sendMessage(to, text) { return window.go?.main?.App?.SendMessage?.(to, text); }
   async sendCapsule(to, text, secs) { return window.go?.main?.App?.SendCapsule?.(to, text, secs); }
   async createInvite() { return window.go?.main?.App?.CreateInvite?.(); }
@@ -68,6 +70,10 @@ class StateStore {
     this.#messages.get(pid).push(msg);
   }
   getMessages(pid) { return this.#messages.get(pid) ?? []; }
+  getDisplayName(id) {
+    const p = this.#peers.get(id);
+    return (p?.nickname && p.nickname.trim()) ? p.nickname : id;
+  }
 }
 
 /* ─── Toast ──────────────────────────────────────────────────────────── */
@@ -424,8 +430,15 @@ class App {
       navigator.clipboard.writeText(myID);
       this.#toast.show('Address copied');
     });
-    const online = await this.#bridge.getOnlinePeers();
-    for (const id of (online || [])) this.#store.upsertPeer(id, { online: true });
+    const allPeers = await this.#bridge.getAllPeers();
+    for (const p of (allPeers || [])) {
+      this.#store.upsertPeer(p.user_id, {
+        nickname: p.nickname || '',
+        hasSession: p.has_session,
+        online: false,
+      });
+    }
+    // Status online virá via presence:online_list e presence:online eventos
     this.#chatUI.renderPeerList();
   }
 
@@ -441,7 +454,7 @@ class App {
       if (!to) return;
       try {
         await this.#bridge.sendMessage(to, text);
-        const m = { from: this.#store.getMyID(), to, text, ts: Date.now() };
+        const m = { from: this.#store.getMyID(), to, text, ts: Date.now(), mine: true };
         this.#store.pushMessage(to, m);
         this.#chatUI.appendMessage(m);
       } catch (e) { this.#toast.show('Send failed: ' + errMsg(e)); }
@@ -551,9 +564,14 @@ class App {
 
     E('invite:token', data => this.#inviteUI.showToken(data));
     E('invite:accepted', peer => {
-      this.#store.upsertPeer(peer.user_id, { online: false });
+      this.#store.upsertPeer(peer.user_id, {
+        nickname: peer.nickname || '',
+        hasSession: peer.has_session,
+        online: false,   // presence:online virá logo em seguida
+      });
       this.#chatUI.renderPeerList();
-      this.#toast.show('Contact added: ' + peer.user_id);
+      const name = this.#store.getDisplayName(peer.user_id);
+      this.#toast.show('Contato adicionado: ' + name);
     });
 
     E('capsule:ready', ({ id, sender_id }) => this.#toast.show(`Capsule ready from ${sender_id}`));

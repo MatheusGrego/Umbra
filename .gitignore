@@ -22,3 +22,6 @@ frontend/wailsjs/go/
 # OS
 .DS_Store
 Thumbs.db
+
+# Worktrees
+.worktrees/

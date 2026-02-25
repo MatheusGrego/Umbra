@@ -16,6 +16,14 @@ type Peer struct {
 	UserID    string `json:"user_id"`
 	EdPubKey  string `json:"ed_pub_key"` // base64 Ed25519
 	X25519Key string `json:"x25519_key"` // base64 X25519
+	Nickname  string `json:"nickname,omitempty"`
+}
+
+// PeerInfo is the read-only view returned to the UI layer.
+type PeerInfo struct {
+	UserID     string `json:"user_id"`
+	Nickname   string `json:"nickname"`
+	HasSession bool   `json:"has_session"`
 }
 
 // PeerStore is a thread-safe, persisted contact book.
@@ -84,6 +92,36 @@ func (s *PeerStore) All() []Peer {
 		out = append(out, p)
 	}
 	return out
+}
+
+// GetAllPeers returns a PeerInfo snapshot of all known peers.
+func (s *PeerStore) GetAllPeers() []PeerInfo {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]PeerInfo, 0, len(s.peers))
+	for uid, p := range s.peers {
+		_, hasSession := s.sessions[uid]
+		out = append(out, PeerInfo{
+			UserID:     uid,
+			Nickname:   p.Nickname,
+			HasSession: hasSession,
+		})
+	}
+	return out
+}
+
+// SetNickname assigns a local display name to a known peer and persists it.
+func (s *PeerStore) SetNickname(userID, nickname string) error {
+	s.mu.Lock()
+	p, ok := s.peers[userID]
+	if !ok {
+		s.mu.Unlock()
+		return fmt.Errorf("peers: unknown peer %s", userID)
+	}
+	p.Nickname = nickname
+	s.peers[userID] = p
+	s.mu.Unlock()
+	return s.save()
 }
 
 // RehydrateSessions re-derives all session keys after loading from disk.

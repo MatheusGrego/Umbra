@@ -140,8 +140,18 @@ func (s *PresenceService) HandleInviteResult(env ws.Envelope) {
 		return
 	}
 
+	// Mark the new peer as online — they're clearly connected right now.
+	s.mu.Lock()
+	s.online[p.UserID] = true
+	s.mu.Unlock()
+
 	log.Printf("[presence] new contact added: %s", p.UserID)
-	s.emitter.Emit("invite:accepted", peer)
+	s.emitter.Emit("invite:accepted", gc.PeerInfo{
+		UserID:     peer.UserID,
+		Nickname:   peer.Nickname,
+		HasSession: true,
+	})
+	s.emitter.Emit("presence:online", p.UserID)
 }
 
 // ResolveInvite sends an invite_resolve with the given token.

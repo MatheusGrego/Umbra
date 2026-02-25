@@ -154,6 +154,142 @@
     }
   `;
 
+  const FRAG_SRC_LIGHT = `
+    precision highp float;
+    uniform vec2  u_resolution;
+    uniform float u_time;
+    uniform float u_seed;
+
+    vec3 mod289(vec3 x) { return x - floor(x * (1.0/289.0)) * 289.0; }
+    vec2 mod289(vec2 x) { return x - floor(x * (1.0/289.0)) * 289.0; }
+    vec3 permute(vec3 x) { return mod289(((x*34.0)+1.0)*x); }
+
+    float snoise(vec2 v) {
+      const vec4 C = vec4(0.211324865405187, 0.366025403784439,
+                         -0.577350269189626, 0.024390243902439);
+      vec2 i  = floor(v + dot(v, C.yy));
+      vec2 x0 = v - i + dot(i, C.xx);
+      vec2 i1 = (x0.x > x0.y) ? vec2(1.0, 0.0) : vec2(0.0, 1.0);
+      vec4 x12 = x0.xyxy + C.xxzz;
+      x12.xy -= i1;
+      i = mod289(i);
+      vec3 p = permute(permute(i.y + vec3(0.0, i1.y, 1.0))
+                                   + i.x + vec3(0.0, i1.x, 1.0));
+      vec3 m = max(0.5 - vec3(dot(x0,x0), dot(x12.xy,x12.xy),
+                               dot(x12.zw,x12.zw)), 0.0);
+      m = m*m; m = m*m;
+      vec3 x_ = 2.0 * fract(p * C.www) - 1.0;
+      vec3 h  = abs(x_) - 0.5;
+      vec3 ox = floor(x_ + 0.5);
+      vec3 a0 = x_ - ox;
+      m *= 1.79284291400159 - 0.85373472095314 * (a0*a0 + h*h);
+      vec3 g;
+      g.x = a0.x * x0.x + h.x * x0.y;
+      g.yz = a0.yz * x12.xz + h.yz * x12.yw;
+      return 130.0 * dot(m, g);
+    }
+
+    float fbm(vec2 p, float t) {
+      float val = 0.0;
+      float amp = 0.5;
+      float freq = 1.0;
+      vec2 drift = vec2(t * 0.012, t * 0.007);
+      for (int i = 0; i < 6; i++) {
+        val += amp * snoise(p * freq + drift);
+        drift *= 1.2;
+        freq *= 2.0;
+        amp  *= 0.5;
+      }
+      return val;
+    }
+
+    void main() {
+      vec2 uv = gl_FragCoord.xy / u_resolution;
+      float aspect = u_resolution.x / u_resolution.y;
+      vec2 p = vec2(uv.x * aspect, uv.y);
+      float t = u_time + u_seed;
+
+      // Aurora cloud layers
+      float n1 = fbm(p * 1.6 + vec2(0.0, 0.0), t);
+      float n2 = fbm(p * 2.2 + vec2(4.3, 1.1), t * 0.6);
+      float n3 = fbm(p * 3.0 + vec2(7.5, 3.2), t * 0.4);
+
+      float cloud = 0.0;
+      cloud += smoothstep(-0.15, 0.55, n1) * 0.40;
+      cloud += smoothstep(0.0,   0.45, n2) * 0.22;
+      cloud += smoothstep(0.1,   0.65, n3) * 0.16;
+      cloud = clamp(cloud, 0.0, 1.0);
+
+      // Aurora color palette — light base with chromatic veins
+      vec3 lightBase    = vec3(0.940, 0.950, 0.972);
+      vec3 auroraBlue   = vec3(0.700, 0.860, 0.980);
+      vec3 auroraTeal   = vec3(0.000, 0.780, 0.690);
+      vec3 auroraViolet = vec3(0.650, 0.550, 0.980);
+      vec3 brightWhite  = vec3(0.980, 0.990, 1.000);
+
+      vec3 col = lightBase;
+      col = mix(col, auroraBlue,   smoothstep(0.05, 0.35, cloud));
+      col = mix(col, auroraTeal,   smoothstep(0.25, 0.60, cloud) * 0.45);
+      col = mix(col, auroraViolet, smoothstep(0.35, 0.75, cloud) * 0.35);
+      col = mix(col, brightWhite,  smoothstep(0.60, 0.95, cloud) * 0.30);
+
+      // Wispy tendrils
+      float wisp = fbm(p * 4.5 + vec2(t * 0.008, -t * 0.012), t * 0.25);
+      wisp = smoothstep(0.20, 0.60, wisp) * cloud;
+      col += vec3(0.15, 0.25, 0.45) * wisp * 0.18;
+
+      // Subtle sparkles (replace dark stars)
+      vec2 cell = floor(uv * 60.0);
+      float h = fract(sin(dot(cell, vec2(127.1, 311.7))) * 43758.5);
+      float sparkle = 0.0;
+      if (h > 0.97) {
+        vec2 sub = fract(uv * 60.0) - 0.5;
+        float dist = length(sub);
+        sparkle = smoothstep(0.06, 0.0, dist) * 0.4;
+        sparkle *= 0.7 + 0.3 * sin(u_time * (1.0 + h * 3.0));
+      }
+      col += vec3(1.0) * sparkle;
+
+      // Soft vignette — fade edges toward white
+      float vig = length((uv - 0.5) * 1.2);
+      col = mix(col, lightBase, smoothstep(0.3, 0.75, vig) * 0.4);
+
+      // Compress shadows, lift exposure for light feel
+      col = 1.0 - (1.0 - col) * 0.72;
+      col = pow(col, vec3(0.92));
+
+      gl_FragColor = vec4(clamp(col, 0.0, 1.0), 1.0);
+    }
+  `;
+
+  function buildProgram(gl, fragSrc) {
+    function compile(type, src) {
+      const s = gl.createShader(type);
+      gl.shaderSource(s, src);
+      gl.compileShader(s);
+      if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
+        console.error('[nebula] shader error:', gl.getShaderInfoLog(s));
+        gl.deleteShader(s);
+        return null;
+      }
+      return s;
+    }
+    const vs = compile(gl.VERTEX_SHADER, VERT_SRC);
+    const fs = compile(gl.FRAGMENT_SHADER, fragSrc);
+    if (!vs || !fs) return null;
+    const prog = gl.createProgram();
+    gl.attachShader(prog, vs);
+    gl.attachShader(prog, fs);
+    gl.linkProgram(prog);
+    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
+      console.error('[nebula] link error:', gl.getProgramInfoLog(prog));
+      return null;
+    }
+    gl.deleteShader(vs);
+    gl.deleteShader(fs);
+    return prog;
+  }
+
   function initNebula() {
     const container = document.querySelector('.bg-fluid');
     if (!container) return;
@@ -174,30 +310,20 @@
       return;
     }
 
-    // Compile shaders
-    function compile(type, src) {
-      const s = gl.createShader(type);
-      gl.shaderSource(s, src);
-      gl.compileShader(s);
-      if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
-        console.error('[nebula]', gl.getShaderInfoLog(s));
-        return null;
-      }
-      return s;
-    }
+    // Build initial program (dark by default)
+    let prog = buildProgram(gl, FRAG_SRC);
+    if (!prog) return;
 
-    const vs = compile(gl.VERTEX_SHADER, VERT_SRC);
-    const fs = compile(gl.FRAGMENT_SHADER, FRAG_SRC);
-    if (!vs || !fs) return;
-
-    const prog = gl.createProgram();
-    gl.attachShader(prog, vs);
-    gl.attachShader(prog, fs);
-    gl.linkProgram(prog);
-    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
-      console.error('[nebula]', gl.getProgramInfoLog(prog));
-      return;
+    // Uniform locations helper — called after each buildProgram
+    function getUniforms(p) {
+      return {
+        uRes:  gl.getUniformLocation(p, 'u_resolution'),
+        uTime: gl.getUniformLocation(p, 'u_time'),
+        uSeed: gl.getUniformLocation(p, 'u_seed'),
+      };
     }
+    let uniforms = getUniforms(prog);
+
     gl.useProgram(prog);
 
     // Full-screen quad
@@ -211,13 +337,8 @@
     gl.enableVertexAttribArray(aPos);
     gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
 
-    // Uniforms
-    const uRes = gl.getUniformLocation(prog, 'u_resolution');
-    const uTime = gl.getUniformLocation(prog, 'u_time');
-    const uSeed = gl.getUniformLocation(prog, 'u_seed');
-
     const seed = Math.random() * 1000;
-    gl.uniform1f(uSeed, seed);
+    gl.uniform1f(uniforms.uSeed, seed);
 
     // Resize handling
     let width = 0, height = 0;
@@ -231,7 +352,7 @@
         canvas.width = w;
         canvas.height = h;
         gl.viewport(0, 0, w, h);
-        gl.uniform2f(uRes, w, h);
+        gl.uniform2f(uniforms.uRes, w, h);
       }
     }
 
@@ -244,12 +365,30 @@
 
     function frame() {
       const elapsed = (performance.now() - startTime) / 1000.0;
-      gl.uniform1f(uTime, elapsed);
+      gl.uniform1f(uniforms.uTime, elapsed);
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
       animId = requestAnimationFrame(frame);
     }
 
     frame();
+
+    // Expose theme control
+    window.setNebulaTheme = function(theme) {
+      const src = theme === 'light' ? FRAG_SRC_LIGHT : FRAG_SRC;
+      const newProg = buildProgram(gl, src);
+      if (!newProg) return;
+      gl.deleteProgram(prog);
+      prog = newProg;
+      uniforms = getUniforms(prog);
+      // Re-bind vertex attribute for the new program
+      gl.useProgram(prog);
+      const newAPos = gl.getAttribLocation(prog, 'a_pos');
+      gl.enableVertexAttribArray(newAPos);
+      gl.vertexAttribPointer(newAPos, 2, gl.FLOAT, false, 0, 0);
+      // Restore uniforms that are set once (not every frame)
+      gl.uniform1f(uniforms.uSeed, seed);
+      gl.uniform2f(uniforms.uRes, width, height);
+    };
 
     // Expose opacity control for settings panel
     window.setNebulaOpacity = function(v) {

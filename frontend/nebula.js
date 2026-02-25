@@ -251,6 +251,11 @@
 
     frame();
 
+    // Expose opacity control for settings panel
+    window.setNebulaOpacity = function(v) {
+      canvas.style.opacity = Math.max(0, Math.min(1, v));
+    };
+
     // Cleanup on page unload
     window.addEventListener('beforeunload', () => {
       cancelAnimationFrame(animId);

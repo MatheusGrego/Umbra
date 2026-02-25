@@ -469,7 +469,7 @@ class VoiceUI {
 
 /* ─── SettingsUI ─────────────────────────────────────────────────────── */
 class SettingsUI {
-  static DEFAULTS = { distortion: 50, nebula: 85, glass: 50 };
+  static DEFAULTS = { distortion: 50, nebula: 85, glass: 50, theme: 'dark' };
   static KEY = 'umbra:settings';
 
   #current = { ...SettingsUI.DEFAULTS };
@@ -477,6 +477,7 @@ class SettingsUI {
   constructor() {
     this.#load();
     this.#apply(this.#current);
+    this.#applyTheme(this.#current.theme);
     this.#bindDOM();
   }
 
@@ -513,6 +514,13 @@ class SettingsUI {
   }
 
   #bindDOM() {
+    document.getElementById('theme-toggle-btn')
+      ?.addEventListener('click', () => {
+        this.#current.theme = this.#current.theme === 'dark' ? 'light' : 'dark';
+        this.#applyTheme(this.#current.theme);
+        this.#save();
+      });
+
     document.getElementById('settings-open-btn')
       ?.addEventListener('click', () => {
         this.#syncSliders();
@@ -557,6 +565,27 @@ class SettingsUI {
     set('setting-distortion', 'setting-distortion-val', 'distortion');
     set('setting-nebula',     'setting-nebula-val',     'nebula');
     set('setting-glass',      'setting-glass-val',      'glass');
+  }
+
+  #applyTheme(theme) {
+    document.documentElement.dataset.theme = theme;
+    window.setNebulaTheme?.(theme);
+    const btn = document.getElementById('theme-toggle-btn');
+    const icon = document.getElementById('theme-icon');
+    const label = document.getElementById('theme-label');
+    if (!btn) return;
+    if (theme === 'light') {
+      // Ícone sol
+      icon.innerHTML = `<circle cx="7" cy="7" r="2.5" stroke="currentColor" stroke-width="1.2"/>
+        <path d="M7 1v1.5M7 11.5V13M1 7h1.5M11.5 7H13M2.93 2.93l1.06 1.06M10.01 10.01l1.06 1.06M2.93 11.07l1.06-1.06M10.01 3.99l1.06-1.06"
+              stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>`;
+      label.textContent = 'Dark Mode';
+    } else {
+      // Ícone lua
+      icon.innerHTML = `<path d="M7 2a5 5 0 1 0 5 5 3.5 3.5 0 0 1-5-5Z"
+          stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/>`;
+      label.textContent = 'Light Mode';
+    }
   }
 }
 

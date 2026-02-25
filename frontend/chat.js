@@ -461,15 +461,110 @@ class VoiceUI {
   }
 }
 
+/* ─── SettingsUI ─────────────────────────────────────────────────────── */
+class SettingsUI {
+  static DEFAULTS = { distortion: 50, nebula: 85, glass: 50 };
+  static KEY = 'umbra:settings';
+
+  #current = { ...SettingsUI.DEFAULTS };
+
+  constructor() {
+    this.#load();
+    this.#apply(this.#current);
+    this.#bindDOM();
+  }
+
+  #load() {
+    try {
+      const raw = localStorage.getItem(SettingsUI.KEY);
+      if (raw) this.#current = { ...SettingsUI.DEFAULTS, ...JSON.parse(raw) };
+    } catch {}
+  }
+
+  #save() {
+    localStorage.setItem(SettingsUI.KEY, JSON.stringify(this.#current));
+  }
+
+  #apply({ distortion, nebula, glass }) {
+    // Distorção — escala proporcional: panel=base, btn=base*0.6, pill=base*0.4
+    const base = (distortion / 100) * 60; // 0-100 → 0-60
+    ['glass-panel', 'glass-btn', 'glass-pill'].forEach((id, i) => {
+      const factors = [1, 0.6, 0.4];
+      const scale = base * factors[i];
+      const dm = document.querySelector(`#${id} feDisplacementMap`);
+      if (dm) dm.setAttribute('scale', scale.toFixed(1));
+    });
+
+    // Nebula
+    const nebulaV = nebula / 100; // 0-100 → 0-1
+    if (window.setNebulaOpacity) window.setNebulaOpacity(nebulaV);
+
+    // Glass opacity
+    const glassAlpha = glass / 100 * 0.8 + 0.1; // 10-90% → 0.1-0.9 alpha
+    document.documentElement.style.setProperty(
+      '--glass-bg', `rgba(12,12,24,${glassAlpha.toFixed(2)})`
+    );
+  }
+
+  #bindDOM() {
+    document.getElementById('settings-open-btn')
+      ?.addEventListener('click', () => {
+        this.#syncSliders();
+        document.getElementById('settings-panel').classList.remove('hidden');
+      });
+    document.getElementById('settings-close-btn')
+      ?.addEventListener('click', () => {
+        document.getElementById('settings-panel').classList.add('hidden');
+      });
+
+    const bind = (id, valId, key) => {
+      const slider = document.getElementById(id);
+      const valEl = document.getElementById(valId);
+      if (!slider) return;
+      slider.addEventListener('input', () => {
+        const v = parseInt(slider.value, 10);
+        this.#current[key] = v;
+        valEl.textContent = v + '%';
+        this.#apply(this.#current);
+        this.#save();
+      });
+    };
+    bind('setting-distortion', 'setting-distortion-val', 'distortion');
+    bind('setting-nebula',     'setting-nebula-val',     'nebula');
+    bind('setting-glass',      'setting-glass-val',      'glass');
+
+    document.getElementById('settings-reset-btn')?.addEventListener('click', () => {
+      this.#current = { ...SettingsUI.DEFAULTS };
+      this.#syncSliders();
+      this.#apply(this.#current);
+      this.#save();
+    });
+  }
+
+  #syncSliders() {
+    const set = (id, valId, key) => {
+      const s = document.getElementById(id);
+      const v = document.getElementById(valId);
+      if (s) s.value = this.#current[key];
+      if (v) v.textContent = this.#current[key] + '%';
+    };
+    set('setting-distortion', 'setting-distortion-val', 'distortion');
+    set('setting-nebula',     'setting-nebula-val',     'nebula');
+    set('setting-glass',      'setting-glass-val',      'glass');
+  }
+}
+
 /* ─── App ────────────────────────────────────────────────────────────── */
 class App {
   #bridge = new WailsBridge();
   #bus = new EventBus();
   #store = new StateStore();
   #toast = new Toast();
+  #settings;
   #chatUI; #capsuleUI; #inviteUI; #screenShareUI; #voiceUI;
 
   async init() {
+    this.#settings = new SettingsUI();  // aplica settings salvas antes de tudo
     this.#chatUI = new ChatUI(this.#store, this.#bus);
     this.#capsuleUI = new CapsuleUI(this.#bus);
     this.#inviteUI = new InviteUI(this.#bus);

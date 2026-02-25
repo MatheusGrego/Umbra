@@ -98,6 +98,14 @@
       <ul id="peer-list" role="listbox"></ul>
 
       <div class="sidebar-footer">
+        <button class="sidebar-footer-btn" id="settings-open-btn">
+          <svg viewBox="0 0 14 14" fill="none">
+            <circle cx="7" cy="7" r="2" stroke="currentColor" stroke-width="1.2"/>
+            <path d="M7 1v1.2M7 11.8V13M1 7h1.2M11.8 7H13M2.93 2.93l.85.85M10.22 10.22l.85.85M2.93 11.07l.85-.85M10.22 3.78l.85-.85"
+                  stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+          </svg>
+          Configurações
+        </button>
         <button class="sidebar-footer-btn" id="resolve-invite-btn">
           <svg viewBox="0 0 14 14" fill="none">
             <circle cx="7" cy="7" r="5.5" stroke="currentColor" stroke-width="1.2" />
@@ -286,6 +294,57 @@
         Message is encrypted before leaving this device. Server stores ciphertext only.
       </div>
       <button class="primary-btn" id="send-capsule-btn">SEND CAPSULE</button>
+    </div>
+  </div>
+
+  <!-- ═══════════════ SETTINGS PANEL ═══════════════ -->
+  <div id="settings-panel" class="side-panel hidden">
+    <div class="panel-header">
+      <div class="section-title-row">
+        <div class="section-accent"></div>
+        <span class="label-xs">CONFIGURAÇÕES VISUAIS</span>
+      </div>
+      <button class="icon-btn" id="settings-close-btn">
+        <svg viewBox="0 0 16 16" fill="none">
+          <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+      </button>
+    </div>
+    <div class="panel-body">
+
+      <div class="field-group">
+        <label class="field-label" for="setting-distortion">
+          DISTORÇÃO DO VIDRO
+          <span class="setting-value" id="setting-distortion-val">50%</span>
+        </label>
+        <input type="range" id="setting-distortion" class="setting-slider" min="0" max="100" value="50"/>
+      </div>
+
+      <div class="field-group">
+        <label class="field-label" for="setting-nebula">
+          INTENSIDADE DO NEBULA
+          <span class="setting-value" id="setting-nebula-val">85%</span>
+        </label>
+        <input type="range" id="setting-nebula" class="setting-slider" min="0" max="100" value="85"/>
+      </div>
+
+      <div class="field-group">
+        <label class="field-label" for="setting-glass">
+          OPACIDADE DO VIDRO
+          <span class="setting-value" id="setting-glass-val">50%</span>
+        </label>
+        <input type="range" id="setting-glass" class="setting-slider" min="10" max="90" value="50"/>
+      </div>
+
+      <div class="field-note">
+        <svg viewBox="0 0 12 12" fill="none">
+          <circle cx="6" cy="6" r="4.5" stroke="currentColor" stroke-width="1"/>
+          <path d="M6 4.5v3M6 9v.2" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+        </svg>
+        Configurações salvas automaticamente.
+      </div>
+
+      <button class="ghost-btn" id="settings-reset-btn">RESTAURAR PADRÕES</button>
     </div>
   </div>
 

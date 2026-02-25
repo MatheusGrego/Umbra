@@ -1547,6 +1547,36 @@ body {
   }
 }
 
+/* ── Settings slider ─────────────────────────────────────────────────── */
+.setting-slider {
+  width: 100%;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--glass-divider);
+  outline: none;
+  cursor: pointer;
+}
+.setting-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: pointer;
+  transition: transform 100ms ease;
+}
+.setting-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
+}
+.setting-value {
+  float: right;
+  font-size: 10px;
+  color: var(--accent);
+  font-family: var(--font-mono);
+}
+
 /* ── Onboarding ──────────────────────────────────────────────────────── */
 #onboarding-state {
   display: flex;

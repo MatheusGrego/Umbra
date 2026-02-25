@@ -469,7 +469,7 @@ class VoiceUI {
 
 /* ─── SettingsUI ─────────────────────────────────────────────────────── */
 class SettingsUI {
-  static DEFAULTS = { distortion: 50, nebula: 85, glass: 50, theme: 'dark' };
+  static DEFAULTS = { distortion: 50, nebula: 85, glass: 0, theme: 'dark' };
   static KEY = 'umbra:settings';
 
   #current = { ...SettingsUI.DEFAULTS };
@@ -506,11 +506,13 @@ class SettingsUI {
     const nebulaV = nebula / 100; // 0-100 → 0-1
     if (window.setNebulaOpacity) window.setNebulaOpacity(nebulaV);
 
-    // Glass opacity
-    const glassAlpha = glass / 100 * 0.8 + 0.1; // 10-90% → 0.1-0.9 alpha
-    document.documentElement.style.setProperty(
-      '--glass-bg', `rgba(12,12,24,${glassAlpha.toFixed(2)})`
-    );
+    // Glass tint — theme-aware, default 0 (transparent)
+    const tintAlpha = (glass / 100) * 0.45; // 0-100 → 0-0.45 alpha
+    const isDark = (document.documentElement.dataset.theme ?? 'dark') === 'dark';
+    const tintColor = isDark
+      ? `rgba(0, 0, 0, ${tintAlpha.toFixed(2)})`
+      : `rgba(255, 255, 255, ${tintAlpha.toFixed(2)})`;
+    document.documentElement.style.setProperty('--glass-tint', tintColor);
   }
 
   #bindDOM() {

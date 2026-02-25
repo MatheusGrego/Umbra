@@ -10,6 +10,7 @@ import (
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 
+	gc "umbra/client/crypto"
 	"umbra/client/service"
 )
 
@@ -139,6 +140,19 @@ func (a *App) HangupVoice() {
 // ToggleMute toggles voice call microphone mute state.
 func (a *App) ToggleMute() bool {
 	return a.voice.ToggleMute()
+}
+
+// ---- Peers --------------------------------------------------------------
+
+// GetAllPeers returns all known contacts with their nickname and session status.
+// Used by the frontend to bootstrap the peer list.
+func (a *App) GetAllPeers() []gc.PeerInfo {
+	return a.presence.AllPeers()
+}
+
+// SetNickname assigns a local display name to a contact.
+func (a *App) SetNickname(userID, nickname string) error {
+	return a.presence.SetPeerNickname(userID, nickname)
 }
 
 // ---- Helpers ------------------------------------------------------------

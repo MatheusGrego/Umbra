@@ -39,6 +39,16 @@ func NewPresenceService(id *gc.Identity, peers *gc.PeerStore, sender Sender, emi
 // MyUserID returns the local identity's user ID.
 func (s *PresenceService) MyUserID() string { return s.myUserID }
 
+// AllPeers returns all known peers from the peer store.
+func (s *PresenceService) AllPeers() []gc.PeerInfo {
+	return s.peers.GetAllPeers()
+}
+
+// SetPeerNickname assigns a local nickname to a peer.
+func (s *PresenceService) SetPeerNickname(userID, nickname string) error {
+	return s.peers.SetNickname(userID, nickname)
+}
+
 // OnlinePeers returns IDs of known peers that are currently connected.
 func (s *PresenceService) OnlinePeers() []string {
 	s.mu.RLock()

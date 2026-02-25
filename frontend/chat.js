@@ -153,6 +153,18 @@ class ChatUI {
 
   updatePeerStatus(id, online) {
     this.renderPeerList();
+    if (online) {
+      // Pulsar o dot do peer que acabou de ficar online
+      requestAnimationFrame(() => {
+        const li = document.querySelector(`[data-id="${id}"] .status-dot`);
+        if (li) {
+          li.classList.remove('pulse');
+          void li.offsetWidth; // reflow para reiniciar animação
+          li.classList.add('pulse');
+          li.addEventListener('animationend', () => li.classList.remove('pulse'), { once: true });
+        }
+      });
+    }
     if (this.#store.getActivePeer() === id) this.#setStatus(online);
   }
 

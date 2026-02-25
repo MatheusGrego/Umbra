@@ -1,0 +1,24 @@
+# Binaries
+*.exe
+*.dll
+*.so
+*.dylib
+build/bin/
+
+# Go
+vendor/
+
+# Wails dev
+frontend/wailsjs/go/
+
+# Data / identity
+*.json
+!build/windows/info.json
+!wails.json
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db

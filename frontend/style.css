@@ -18,7 +18,7 @@
   --glass-rim-s: rgba(255, 255, 255, 0.08);
   --glass-divider: rgba(255, 255, 255, 0.08);
   --glass-tint:       transparent;               /* tint do ::before — controlado pelo slider */
-  --glass-rim-inset:  rgba(255, 255, 255, 0.55); /* highlight de borda inset */
+  --glass-rim-inset:  rgba(255, 255, 255, 0.70); /* highlight de borda inset */
 
   --t100: rgba(255, 255, 255, 1);
   --t70: rgba(200, 210, 240, 0.80);
@@ -111,7 +111,7 @@ body {
   background-color: var(--glass-tint);
   box-shadow:
     inset 2px 2px 0px -1px var(--glass-rim-inset),
-    inset 0 0 3px 1px rgba(255, 255, 255, 0.12),
+    inset 0 0 3px 1px rgba(255, 255, 255, 0.50),
     inset -1px -1px 0px -1px rgba(255, 255, 255, 0.08);
   pointer-events: none;
   z-index: 1;
@@ -146,7 +146,7 @@ body {
   background-color: rgba(255, 255, 255, 0.10);
   box-shadow:
     inset 1.5px 1.5px 0px -1px var(--glass-rim-inset),
-    inset 0 0 2px 1px rgba(255, 255, 255, 0.07);
+    inset 0 0 2px 1px rgba(255, 255, 255, 0.35);
   pointer-events: none;
   z-index: 1;
   overflow: hidden;

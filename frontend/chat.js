@@ -235,6 +235,12 @@ class ChatUI {
       e.preventDefault();
       const text = input.value.trim();
       if (!text) return;
+      // Spring animation no botão de envio
+      const btn = document.getElementById('send-btn');
+      btn.classList.remove('send-spring');
+      void btn.offsetWidth;
+      btn.classList.add('send-spring');
+      btn.addEventListener('animationend', () => btn.classList.remove('send-spring'), { once: true });
       this.#bus.emit('msg:send', text);
       input.value = '';
     });

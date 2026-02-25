@@ -1547,6 +1547,20 @@ body {
   }
 }
 
+/* ── Nickname edit ───────────────────────────────────────────────────── */
+.chat-peer-name-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.nickname-edit-btn {
+  opacity: 0;
+  transition: opacity 150ms ease;
+}
+#chat-header:hover .nickname-edit-btn {
+  opacity: 1;
+}
+
 /* ── Animations ──────────────────────────────────────────────────────── */
 
 @keyframes msg-in {

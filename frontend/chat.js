@@ -91,7 +91,7 @@ class Toast {
 /* ─── ChatUI ─────────────────────────────────────────────────────────── */
 class ChatUI {
   #store; #bus;
-  constructor(store, bus) { this.#store = store; this.#bus = bus; this.#bindDOM(); }
+  constructor(store, bus) { this.#store = store; this.#bus = bus; this.#bindDOM(); this.#bindNicknameEdit(); }
 
   renderPeerList() {
     const ul = document.getElementById('peer-list');
@@ -102,14 +102,16 @@ class ChatUI {
       li.className = 'peer-item' + (p.id === active ? ' active' : '');
       li.setAttribute('role', 'option');
       li.dataset.id = p.id;
+      const name = this.#store.getDisplayName(p.id);
       li.innerHTML = `
-        <div class="peer-avatar">${p.id[0].toUpperCase()}</div>
+        <div class="peer-avatar${!p.hasSession ? ' no-session-avatar' : ''}">${name[0].toUpperCase()}</div>
         <div class="peer-info">
-          <div class="peer-name">${p.id}</div>
+          <div class="peer-name">${name}</div>
           <div class="peer-id-short">${p.id}</div>
         </div>
         <span class="status-dot${p.online ? ' online' : ''}"></span>
       `;
+      if (!p.hasSession) li.classList.add('no-session');
       li.addEventListener('click', () => this.#bus.emit('peer:selected', p.id));
       ul.appendChild(li);
     }
@@ -117,11 +119,13 @@ class ChatUI {
 
   openChat(peerID) {
     const p = this.#store.getPeer(peerID);
+    const name = this.#store.getDisplayName(peerID);
     document.getElementById('empty-state').classList.add('hidden');
+    document.getElementById('onboarding-state')?.classList.add('hidden');
     const cv = document.getElementById('chat-view');
     cv.classList.remove('hidden');
-    document.getElementById('chat-peer-name').textContent = peerID;
-    document.getElementById('chat-avatar').textContent = peerID[0].toUpperCase();
+    document.getElementById('chat-peer-name').textContent = name;
+    document.getElementById('chat-avatar').textContent = name[0].toUpperCase();
     this.#setStatus(p?.online ?? false);
     this.renderMessages(peerID);
     document.getElementById('message-input').focus();
@@ -168,6 +172,48 @@ class ChatUI {
       <div class="msg-meta">${fmtTime(msg.ts)}</div>
     `;
     return div;
+  }
+
+  #bindNicknameEdit() {
+    document.getElementById('nickname-edit-btn')?.addEventListener('click', () => {
+      const peer = this.#store.getActivePeer();
+      if (!peer) return;
+      const nameEl = document.getElementById('chat-peer-name');
+      const current = nameEl.textContent;
+
+      const input = document.createElement('input');
+      input.className = 'nickname-input';
+      input.value = current === peer ? '' : current; // se for o ID, começa vazio
+      input.placeholder = peer;
+      input.maxLength = 32;
+
+      nameEl.replaceWith(input);
+      input.focus();
+      input.select();
+
+      const save = () => {
+        const val = input.value.trim();
+        this.#bus.emit('nickname:save', { userID: peer, nickname: val });
+        const newName = val || peer;
+        const span = document.createElement('div');
+        span.className = 'chat-peer-name';
+        span.id = 'chat-peer-name';
+        span.textContent = newName;
+        input.replaceWith(span);
+      };
+
+      input.addEventListener('keydown', e => {
+        if (e.key === 'Enter') { e.preventDefault(); save(); }
+        if (e.key === 'Escape') {
+          const span = document.createElement('div');
+          span.className = 'chat-peer-name';
+          span.id = 'chat-peer-name';
+          span.textContent = current;
+          input.replaceWith(span);
+        }
+      });
+      input.addEventListener('blur', save);
+    });
   }
 
   #bindDOM() {
@@ -532,6 +578,16 @@ class App {
         await this.#bridge.hangupVoice();
         this.#voiceUI.hide();
       } catch (e) { this.#toast.show('Hangup failed'); }
+    });
+
+    this.#bus.on('nickname:save', async ({ userID, nickname }) => {
+      try {
+        await this.#bridge.setNickname(userID, nickname);
+        this.#store.upsertPeer(userID, { nickname });
+        this.#chatUI.renderPeerList();
+      } catch (e) {
+        this.#toast.show('Falha ao salvar apelido');
+      }
     });
 
     this.#bus.on('toast', msg => this.#toast.show(msg));

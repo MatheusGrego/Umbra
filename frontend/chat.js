@@ -311,6 +311,22 @@ class ChatUI {
     if (near) feed.scrollTop = feed.scrollHeight;
   }
 
+  appendCapsuleBubble(peer, capsuleId, delayLabel) {
+    const active = this.#store.getActivePeer();
+    if (peer !== active) return;
+    const feed = document.getElementById('messages');
+    const el = document.createElement('div');
+    el.className = 'msg mine';
+    el.id = `capsule-bubble-${capsuleId}`;
+    el.innerHTML = `
+      <div class="msg-bubble msg-bubble--capsule">
+        <span class="capsule-bubble-icon">⧗</span>
+        <span class="capsule-bubble-text">Cápsula enviada · entrega em ${escHTML(delayLabel)}</span>
+      </div>`;
+    feed.appendChild(el);
+    feed.scrollTop = feed.scrollHeight;
+  }
+
   updatePeerStatus(id, online) {
     this.renderPeerList();
     if (online) {
@@ -422,40 +438,154 @@ class ChatUI {
   }
 }
 
+/* ─── CapsuleStore ───────────────────────────────────────────────── */
+class CapsuleStore {
+  #sent = new Map();  // id → { id, peer, delay, deliverAt, delivered }
+  #recv = new Map();  // id → { id, from, text, receivedAt }
+
+  addSent({ id, peer, delay }) {
+    this.#sent.set(id, {
+      id, peer, delay,
+      deliverAt: Date.now() + delay * 1000,
+      delivered: false,
+    });
+  }
+
+  markDelivered(id) {
+    const entry = this.#sent.get(id);
+    if (entry) { entry.delivered = true; this.#sent.set(id, entry); }
+  }
+
+  addReceived({ id, from, text }) {
+    this.#recv.set(id, { id, from, text, receivedAt: Date.now() });
+  }
+
+  getSent() { return [...this.#sent.values()]; }
+  getReceived() { return [...this.#recv.values()]; }
+}
+
 /* ─── CapsuleUI ──────────────────────────────────────────────────────── */
 class CapsuleUI {
   #bus;
-  constructor(bus) { this.#bus = bus; this.#bindDOM(); }
+  #store = new CapsuleStore();
 
-  show() { document.getElementById('capsule-panel').classList.remove('hidden'); }
+  constructor(bus) {
+    this.#bus = bus;
+    this.#bind();
+  }
+
+  show() {
+    document.getElementById('capsule-panel')?.classList.remove('hidden');
+  }
+
   hide() {
-    document.getElementById('capsule-panel').classList.add('hidden');
+    document.getElementById('capsule-panel')?.classList.add('hidden');
     document.getElementById('capsule-text').value = '';
   }
+
   showReceived({ id, from, text }) {
-    this.#openModal('modal-capsule-received');
-    document.querySelector('.capsule-from-id').textContent = from;
-    document.querySelector('.capsule-msg-body').textContent = text;
+    this.#store.addReceived({ id, from, text });
+    this.#renderRecvList();
+    const body = document.querySelector('#modal-capsule-received .capsule-msg-body');
+    const fromEl = document.querySelector('#modal-capsule-received .capsule-from-id');
+    if (body) body.textContent = text;
+    if (fromEl) fromEl.textContent = from;
+    document.getElementById('modal-backdrop')?.classList.remove('hidden');
+    document.getElementById('modal-capsule-received')?.classList.remove('hidden');
   }
 
-  #bindDOM() {
+  addSent({ id, peer, delay }) {
+    this.#store.addSent({ id, peer, delay });
+    this.#renderSentList();
+  }
+
+  markDelivered(id) {
+    this.#store.markDelivered(id);
+    this.#renderSentList();
+    const bubble = document.getElementById(`capsule-bubble-${id}`);
+    if (bubble) {
+      bubble.querySelector('.capsule-bubble-icon').textContent = '✓';
+      bubble.querySelector('.capsule-bubble-text').textContent = 'Cápsula entregue';
+    }
+  }
+
+  #renderSentList() {
+    const list = document.getElementById('capsule-sent-list');
+    if (!list) return;
+    const items = this.#store.getSent();
+    if (!items.length) {
+      list.innerHTML = '<p class="capsule-empty">Nenhuma cápsula enviada nesta sessão.</p>';
+      return;
+    }
+    list.innerHTML = items.map(({ id, peer, deliverAt, delivered }) => {
+      const status = delivered ? '✓ entregue' : `⧗ ${this.#formatDelay(deliverAt - Date.now())}`;
+      const statusClass = delivered ? 'delivered' : '';
+      return `
+        <div class="capsule-item">
+          <div class="capsule-item-header">
+            <span class="capsule-item-peer">${escHTML(peer)}</span>
+            <span class="capsule-item-status ${statusClass}">${status}</span>
+          </div>
+        </div>`;
+    }).join('');
+  }
+
+  #renderRecvList() {
+    const list = document.getElementById('capsule-recv-list');
+    if (!list) return;
+    const items = this.#store.getReceived();
+    if (!items.length) {
+      list.innerHTML = '<p class="capsule-empty">Nenhuma cápsula recebida nesta sessão.</p>';
+      return;
+    }
+    list.innerHTML = items.map(({ id, from, text, receivedAt }) => `
+      <div class="capsule-item">
+        <div class="capsule-item-header">
+          <span class="capsule-item-peer">${escHTML(from)}</span>
+          <span class="capsule-item-meta">${new Date(receivedAt).toLocaleTimeString()}</span>
+        </div>
+        <div class="capsule-item-preview">${escHTML(text)}</div>
+      </div>`
+    ).join('');
+  }
+
+  #formatDelay(ms) {
+    if (ms <= 0) return 'em breve';
+    const s = Math.floor(ms / 1000);
+    if (s < 60) return `${s}s`;
+    if (s < 3600) return `${Math.floor(s / 60)}m`;
+    if (s < 86400) return `${Math.floor(s / 3600)}h`;
+    return `${Math.floor(s / 86400)}d`;
+  }
+
+  #bind() {
     document.getElementById('capsule-open-btn')
       ?.addEventListener('click', () => this.show());
     document.getElementById('capsule-close-btn')
       ?.addEventListener('click', () => this.hide());
-    document.getElementById('send-capsule-btn')
-      ?.addEventListener('click', () => {
-        const text = document.getElementById('capsule-text').value.trim();
-        const delay = parseInt(document.getElementById('capsule-delay').value, 10);
-        if (!text) return;
-        this.#bus.emit('capsule:send', { text, delay });
-        this.hide();
+
+    // Troca de abas
+    document.querySelectorAll('.capsule-tab').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.capsule-tab').forEach(t => t.classList.remove('active'));
+        btn.classList.add('active');
+        const tab = btn.dataset.tab;
+        ['new', 'sent', 'recv'].forEach(t => {
+          document.getElementById(`capsule-tab-${t}`)
+            ?.classList.toggle('hidden', t !== tab);
+        });
+        if (tab === 'sent') this.#renderSentList();
+        if (tab === 'recv') this.#renderRecvList();
       });
-  }
-  #openModal(id) {
-    document.querySelectorAll('.modal-view').forEach(v => v.classList.add('hidden'));
-    document.getElementById(id).classList.remove('hidden');
-    document.getElementById('modal-backdrop').classList.remove('hidden');
+    });
+
+    document.getElementById('send-capsule-btn')?.addEventListener('click', () => {
+      const text = document.getElementById('capsule-text').value.trim();
+      const delay = parseInt(document.getElementById('capsule-delay').value, 10);
+      if (!text) return;
+      this.#bus.emit('capsule:send', { text, delay });
+      this.hide();
+    });
   }
 }
 
@@ -907,11 +1037,17 @@ class App {
     });
 
     this.#bus.on('capsule:send', async ({ text, delay }) => {
-      const to = this.#store.getActivePeer();
-      if (!to) return;
+      const peer = this.#store.getActivePeer();
+      if (!peer) return;
       try {
-        await this.#bridge.sendCapsule(to, text, delay);
-        this.#toast.show('Capsule scheduled');
+        await this.#bridge.sendCapsule(peer, text, delay);
+        const id = `local-${Date.now()}`;
+        const delayLabel = delay >= 86400 ? '24h'
+          : delay >= 21600 ? '6h'
+          : delay >= 3600  ? '1h'
+          : '10min';
+        this.#capsuleUI.addSent({ id, peer, delay });
+        this.#chatUI.appendCapsuleBubble(peer, id, delayLabel);
       } catch (e) { this.#toast.show('Capsule failed: ' + errMsg(e)); }
     });
 
@@ -1052,7 +1188,10 @@ class App {
       if (isFirst) this.#hideOnboarding(peer.user_id);
     });
 
-    E('capsule:ready', ({ id, sender_id }) => this.#toast.show(`Capsule ready from ${sender_id}`));
+    E('capsule:ready', ({ id, sender_id }) => {
+      this.#toast.show(`Capsule ready from ${sender_id}`);
+      this.#capsuleUI.markDelivered(id);
+    });
     E('capsule:received', msg => this.#capsuleUI.showReceived(msg));
 
     // ── Screen share Wails events ──

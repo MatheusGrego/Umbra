@@ -1961,3 +1961,134 @@ body {
   background: rgba(180, 200, 255, 0.20);
   color: var(--t100);
 }
+
+/* ─── Capsule tabs ─────────────────────────────────────────────────── */
+.capsule-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--glass-divider);
+  padding: 0 16px;
+  gap: 4px;
+}
+
+.capsule-tab {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font: var(--font-label-xs);
+  letter-spacing: 0.08em;
+  padding: 8px 10px 6px;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.capsule-tab:hover { color: var(--text); }
+
+.capsule-tab.active {
+  border-bottom-color: var(--accent);
+  color: var(--text);
+}
+
+/* ─── Capsule list (ENVIADAS / RECEBIDAS) ──────────────────────────── */
+.capsule-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 4px 0;
+}
+
+.capsule-empty {
+  color: var(--text-muted);
+  font-size: 11px;
+  padding: 16px 0;
+  text-align: center;
+}
+
+.capsule-item {
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-rim);
+  border-radius: 8px;
+  cursor: pointer;
+  padding: 10px 12px;
+  transition: background 0.15s;
+}
+
+.capsule-item:hover { background: var(--glass-bg-hover); }
+
+.capsule-item-header {
+  align-items: center;
+  display: flex;
+  gap: 6px;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.capsule-item-peer {
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.capsule-item-status {
+  color: var(--text-muted);
+  flex-shrink: 0;
+  font-size: 10px;
+}
+
+.capsule-item-status.delivered { color: var(--accent); }
+
+.capsule-item-meta {
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.capsule-item-preview {
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  color: var(--text);
+  display: -webkit-box;
+  font-size: 11px;
+  margin-top: 4px;
+  overflow: hidden;
+}
+
+/* ─── Capsule bubble no chat ───────────────────────────────────────── */
+.msg-bubble--capsule {
+  align-items: center;
+  background: transparent;
+  border: 1px solid var(--glass-divider);
+  color: var(--text-muted);
+  display: flex;
+  font-size: 11px;
+  gap: 6px;
+  letter-spacing: 0.04em;
+  padding: 6px 10px;
+}
+
+.capsule-bubble-icon {
+  flex-shrink: 0;
+  font-size: 13px;
+}
+
+/* ─── Screenshare sender bar ────────────────────────────────────────── */
+#screenshare-sender-bar {
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  left: 0;
+  padding: 8px 16px;
+  position: fixed;
+  right: 0;
+  top: 0;
+  z-index: 200;
+}
+
+#screenshare-sender-bar .screenshare-bar {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}

@@ -307,7 +307,16 @@
         </svg>
       </button>
     </div>
-    <div class="panel-body">
+
+    <!-- Tab bar -->
+    <div class="capsule-tabs">
+      <button class="capsule-tab active" data-tab="new">NOVA</button>
+      <button class="capsule-tab" data-tab="sent">ENVIADAS</button>
+      <button class="capsule-tab" data-tab="recv">RECEBIDAS</button>
+    </div>
+
+    <!-- Tab: NOVA (composer) -->
+    <div id="capsule-tab-new" class="panel-body">
       <div class="field-group">
         <label class="field-label" for="capsule-text">MESSAGE</label>
         <textarea id="capsule-text" class="field-textarea" rows="6"
@@ -336,6 +345,20 @@
         Message is encrypted before leaving this device. Server stores ciphertext only.
       </div>
       <button class="primary-btn" id="send-capsule-btn">SEND CAPSULE</button>
+    </div>
+
+    <!-- Tab: ENVIADAS -->
+    <div id="capsule-tab-sent" class="panel-body hidden">
+      <div class="capsule-list" id="capsule-sent-list">
+        <p class="capsule-empty">Nenhuma cápsula enviada nesta sessão.</p>
+      </div>
+    </div>
+
+    <!-- Tab: RECEBIDAS -->
+    <div id="capsule-tab-recv" class="panel-body hidden">
+      <div class="capsule-list" id="capsule-recv-list">
+        <p class="capsule-empty">Nenhuma cápsula recebida nesta sessão.</p>
+      </div>
     </div>
   </div>
 

@@ -363,10 +363,30 @@
     const startTime = performance.now();
     let animId;
 
+    // Referências às feTurbulences de displacement (IDs definidos no SVG)
+    const disp = [
+      document.getElementById('disp-turb-panel'),
+      document.getElementById('disp-turb-btn'),
+      document.getElementById('disp-turb-pill'),
+    ];
+    let lastDispUpdate = 0;
+
     function frame() {
       const elapsed = (performance.now() - startTime) / 1000.0;
       gl.uniform1f(uniforms.uTime, elapsed);
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+      // Animar displacement turbulences a ~30fps (não precisa de 60fps)
+      if (elapsed - lastDispUpdate > 0.033) {
+        lastDispUpdate = elapsed;
+        const fx = 0.008 + Math.sin(elapsed * 0.6) * 0.004;
+        const fy = 0.008 + Math.sin(elapsed * 0.6 + 1.2) * 0.004;
+        const freqStr = `${fx.toFixed(4)} ${fy.toFixed(4)}`;
+        disp[0]?.setAttribute('baseFrequency', freqStr);
+        disp[1]?.setAttribute('baseFrequency', freqStr);
+        disp[2]?.setAttribute('baseFrequency', freqStr);
+      }
+
       animId = requestAnimationFrame(frame);
     }
 

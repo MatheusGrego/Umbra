@@ -26,6 +26,91 @@ class EventBus {
 /* ─── Helpers ────────────────────────────────────────────────────────── */
 const errMsg = e => (e instanceof Error ? e.message : String(e)) || 'unknown error';
 
+/* ─── VoiceWebRTC ────────────────────────────────────────────────── */
+class VoiceWebRTC {
+  #pc = null;
+  #localStream = null;
+  #sendSignal; // async (peerID, type, payload) => {}
+
+  constructor(sendSignal) { this.#sendSignal = sendSignal; }
+
+  async startCall(peerID) {
+    const micId = document.getElementById('setting-mic')?.value || '';
+    this.#localStream = await navigator.mediaDevices.getUserMedia({
+      audio: micId ? { deviceId: { exact: micId } } : true,
+    });
+    this.#pc = this.#createPC(peerID);
+    this.#localStream.getTracks().forEach(t => this.#pc.addTrack(t, this.#localStream));
+    const offer = await this.#pc.createOffer();
+    await this.#pc.setLocalDescription(offer);
+    await this.#sendSignal(peerID, 'voice_offer',
+      JSON.stringify({ sdp: offer.sdp, type: offer.type }));
+  }
+
+  async acceptCall(peerID, sdpPayload) {
+    const { sdp, type } = JSON.parse(sdpPayload);
+    const micId = document.getElementById('setting-mic')?.value || '';
+    this.#localStream = await navigator.mediaDevices.getUserMedia({
+      audio: micId ? { deviceId: { exact: micId } } : true,
+    });
+    this.#pc = this.#createPC(peerID);
+    this.#localStream.getTracks().forEach(t => this.#pc.addTrack(t, this.#localStream));
+    await this.#pc.setRemoteDescription({ type, sdp });
+    const answer = await this.#pc.createAnswer();
+    await this.#pc.setLocalDescription(answer);
+    await this.#sendSignal(peerID, 'voice_answer',
+      JSON.stringify({ sdp: answer.sdp, type: answer.type }));
+  }
+
+  async handleAnswer(sdpPayload) {
+    if (!this.#pc) return;
+    const { sdp, type } = JSON.parse(sdpPayload);
+    await this.#pc.setRemoteDescription({ type, sdp });
+  }
+
+  async handleICE(candidatePayload) {
+    if (!this.#pc) return;
+    try {
+      const c = JSON.parse(candidatePayload);
+      if (c?.candidate) await this.#pc.addIceCandidate(c);
+    } catch (e) { console.warn('[voice] ICE', e); }
+  }
+
+  toggleMute() {
+    const tracks = this.#localStream?.getAudioTracks() ?? [];
+    const muted = tracks[0] ? tracks[0].enabled : false; // enabled=true → not muted
+    tracks.forEach(t => { t.enabled = !t.enabled; });
+    return !muted; // retorna novo estado de muted
+  }
+
+  close() {
+    this.#localStream?.getTracks().forEach(t => t.stop());
+    this.#pc?.close();
+    this.#pc = null;
+    this.#localStream = null;
+    const audio = document.getElementById('voice-audio');
+    if (audio) audio.srcObject = null;
+  }
+
+  #createPC(peerID) {
+    const pc = new RTCPeerConnection({
+      iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
+    });
+    pc.onicecandidate = ({ candidate }) => {
+      if (candidate) this.#sendSignal(peerID, 'voice_ice', JSON.stringify(candidate))
+        .catch(console.warn);
+    };
+    pc.ontrack = ({ streams }) => {
+      const audio = document.getElementById('voice-audio');
+      if (!audio) return;
+      audio.srcObject = streams[0];
+      const speakerId = document.getElementById('setting-speaker')?.value || '';
+      if (speakerId && audio.setSinkId) audio.setSinkId(speakerId).catch(console.warn);
+    };
+    return pc;
+  }
+}
+
 /* ─── WailsBridge ────────────────────────────────────────────────────── */
 class WailsBridge {
   async getMyID() { return window.go?.main?.App?.GetMyID?.() ?? 'dev-0000000'; }
@@ -42,11 +127,12 @@ class WailsBridge {
   async rejectScreenShare(peer) { return window.go?.main?.App?.RejectScreenShare?.(peer); }
   async stopScreenShare() { return window.go?.main?.App?.StopScreenShare?.(); }
   // Voice
-  async startVoiceCall(peer) { return window.go?.main?.App?.StartVoiceCall?.(peer); }
+  async sendVoiceSignal(peerID, msgType, payload) {
+    return window.go?.main?.App?.SendVoiceSignal?.(peerID, msgType, payload);
+  }
   async acceptVoiceCall(peer) { return window.go?.main?.App?.AcceptVoiceCall?.(peer); }
   async rejectVoiceCall(peer) { return window.go?.main?.App?.RejectVoiceCall?.(peer); }
   async hangupVoice() { return window.go?.main?.App?.HangupVoice?.(); }
-  async toggleMute() { return window.go?.main?.App?.ToggleMute?.(); }
 }
 
 /* ─── StateStore ─────────────────────────────────────────────────────── */
@@ -415,8 +501,10 @@ class VoiceUI {
   #startTime = 0;
   constructor(bus) { this.#bus = bus; this.#bindDOM(); }
 
-  showIncoming(peerID) {
-    document.getElementById('voice-incoming-peer').textContent = peerID;
+  showIncoming(peerID, sdpPayload = '') {
+    const el = document.getElementById('voice-incoming-peer');
+    el.textContent = peerID;
+    el.dataset.sdp = sdpPayload;
     document.querySelectorAll('.modal-view').forEach(v => v.classList.add('hidden'));
     document.getElementById('modal-voice-incoming').classList.remove('hidden');
     document.getElementById('modal-backdrop').classList.remove('hidden');
@@ -450,8 +538,8 @@ class VoiceUI {
   #bindDOM() {
     document.getElementById('voice-accept-btn')
       ?.addEventListener('click', () => {
-        const peer = document.getElementById('voice-incoming-peer').textContent;
-        this.#bus.emit('voice:accept', peer);
+        const el = document.getElementById('voice-incoming-peer');
+        this.#bus.emit('voice:accept', { peer: el.textContent, sdpPayload: el.dataset.sdp ?? '' });
         document.getElementById('modal-backdrop').classList.add('hidden');
       });
     document.getElementById('voice-reject-btn')
@@ -469,7 +557,7 @@ class VoiceUI {
 
 /* ─── SettingsUI ─────────────────────────────────────────────────────── */
 class SettingsUI {
-  static DEFAULTS = { distortion: 50, nebula: 85, glass: 0, theme: 'dark' };
+  static DEFAULTS = { distortion: 50, nebula: 85, glass: 0, theme: 'dark', micDeviceId: '', speakerDeviceId: '' };
   static KEY = 'umbra:settings';
 
   #current = { ...SettingsUI.DEFAULTS };
@@ -479,6 +567,38 @@ class SettingsUI {
     this.#apply(this.#current);
     this.#applyTheme(this.#current.theme);
     this.#bindDOM();
+    this.#populateDevices();
+  }
+
+  async #populateDevices() {
+    try {
+      // Precisa de permissão de áudio para ver labels
+      await navigator.mediaDevices.getUserMedia({ audio: true }).then(s => s.getTracks().forEach(t => t.stop()));
+    } catch { /* sem permissão — lista sem labels */ }
+    const devices = await navigator.mediaDevices.enumerateDevices().catch(() => []);
+    const micSel = document.getElementById('setting-mic');
+    const spkSel = document.getElementById('setting-speaker');
+    if (!micSel || !spkSel) return;
+
+    const savedMic = this.#current.micDeviceId ?? '';
+    const savedSpk = this.#current.speakerDeviceId ?? '';
+
+    for (const d of devices) {
+      if (d.kind === 'audioinput') {
+        const opt = document.createElement('option');
+        opt.value = d.deviceId;
+        opt.textContent = d.label || `Microfone ${micSel.options.length}`;
+        if (d.deviceId === savedMic) opt.selected = true;
+        micSel.appendChild(opt);
+      }
+      if (d.kind === 'audiooutput') {
+        const opt = document.createElement('option');
+        opt.value = d.deviceId;
+        opt.textContent = d.label || `Saída ${spkSel.options.length}`;
+        if (d.deviceId === savedSpk) opt.selected = true;
+        spkSel.appendChild(opt);
+      }
+    }
   }
 
   #load() {
@@ -555,6 +675,15 @@ class SettingsUI {
       this.#apply(this.#current);
       this.#save();
     });
+
+    document.getElementById('setting-mic')?.addEventListener('change', e => {
+      this.#current.micDeviceId = e.target.value;
+      this.#save();
+    });
+    document.getElementById('setting-speaker')?.addEventListener('change', e => {
+      this.#current.speakerDeviceId = e.target.value;
+      this.#save();
+    });
   }
 
   #syncSliders() {
@@ -567,6 +696,10 @@ class SettingsUI {
     set('setting-distortion', 'setting-distortion-val', 'distortion');
     set('setting-nebula',     'setting-nebula-val',     'nebula');
     set('setting-glass',      'setting-glass-val',      'glass');
+    const mic = document.getElementById('setting-mic');
+    const spk = document.getElementById('setting-speaker');
+    if (mic) mic.value = this.#current.micDeviceId ?? '';
+    if (spk) spk.value = this.#current.speakerDeviceId ?? '';
   }
 
   #applyTheme(theme) {
@@ -598,7 +731,7 @@ class App {
   #store = new StateStore();
   #toast = new Toast();
   #settings;
-  #chatUI; #capsuleUI; #inviteUI; #screenShareUI; #voiceUI;
+  #chatUI; #capsuleUI; #inviteUI; #screenShareUI; #voiceUI; #voiceWebRTC;
 
   async init() {
     this.#settings = new SettingsUI();  // aplica settings salvas antes de tudo
@@ -607,6 +740,9 @@ class App {
     this.#inviteUI = new InviteUI(this.#bus);
     this.#screenShareUI = new ScreenShareUI(this.#bus);
     this.#voiceUI = new VoiceUI(this.#bus);
+    this.#voiceWebRTC = new VoiceWebRTC(
+      (peerID, type, payload) => this.#bridge.sendVoiceSignal(peerID, type, payload)
+    );
     this.#bindBus();
     this.#bindWails();
     await this.#bootstrap();
@@ -736,26 +872,35 @@ class App {
     // ── Voice bus events ──
     this.#bus.on('voice:start', async peer => {
       try {
-        await this.#bridge.startVoiceCall(peer);
+        await this.#voiceWebRTC.startCall(peer);
         this.#toast.show('Calling ' + peer + '…');
       } catch (e) { this.#toast.show('Call failed: ' + errMsg(e)); }
     });
-    this.#bus.on('voice:accept', async peer => {
+
+    this.#bus.on('voice:accept', async ({ peer, sdpPayload }) => {
       try {
-        await this.#bridge.acceptVoiceCall(peer);
+        this.#bridge.acceptVoiceCall(peer); // atualiza estado Go
         this.#voiceUI.showActive(peer);
-      } catch (e) { this.#toast.show('Call failed: ' + errMsg(e)); }
+        await this.#voiceWebRTC.acceptCall(peer, sdpPayload);
+      } catch (e) {
+        this.#voiceUI.hide();
+        this.#toast.show('Call failed: ' + errMsg(e));
+      }
     });
+
     this.#bus.on('voice:reject', async peer => {
       try { await this.#bridge.rejectVoiceCall(peer); }
       catch (e) { this.#toast.show('Reject failed: ' + errMsg(e)); }
     });
-    this.#bus.on('voice:mute', async () => {
-      try { await this.#bridge.toggleMute(); }
-      catch (e) { this.#toast.show('Mute failed'); }
+
+    this.#bus.on('voice:mute', () => {
+      const muted = this.#voiceWebRTC.toggleMute();
+      this.#voiceUI.toggleMuted(muted);
     });
+
     this.#bus.on('voice:hangup', async () => {
       try {
+        this.#voiceWebRTC.close();
         await this.#bridge.hangupVoice();
         this.#voiceUI.hide();
       } catch (e) { this.#toast.show('Hangup failed'); }
@@ -825,14 +970,26 @@ class App {
     E('screenshare:stopped', () => this.#screenShareUI.hide());
 
     // ── Voice Wails events ──
-    E('voice:incoming', peer => this.#voiceUI.showIncoming(peer));
-    E('voice:connected', peer => this.#voiceUI.showActive(peer));
+    E('voice:incoming', ({ peer, payload }) => {
+      this.#voiceUI.showIncoming(peer, payload); // passa SDP para o modal
+    });
+    E('voice:answer', async ({ peer, payload }) => {
+      this.#voiceUI.showActive(peer);
+      await this.#voiceWebRTC.handleAnswer(payload).catch(e =>
+        this.#toast.show('Answer error: ' + errMsg(e))
+      );
+    });
+    E('voice:ice', async ({ payload }) => {
+      await this.#voiceWebRTC.handleICE(payload).catch(console.warn);
+    });
     E('voice:rejected', peer => {
       this.#voiceUI.hide();
       this.#toast.show(`${peer} declined voice call`);
     });
-    E('voice:ended', () => this.#voiceUI.hide());
-    E('voice:muted', muted => this.#voiceUI.toggleMuted(muted));
+    E('voice:ended', () => {
+      this.#voiceWebRTC.close();
+      this.#voiceUI.hide();
+    });
   }
 }
 

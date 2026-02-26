@@ -87,6 +87,7 @@ func main() {
 	dispatcher.Register("webrtc_answer", service.InboundHandlerFunc(screenshareSvc.HandleAnswer))
 	dispatcher.Register("webrtc_ice", service.InboundHandlerFunc(screenshareSvc.HandleICE))
 	dispatcher.Register("webrtc_reject", service.InboundHandlerFunc(screenshareSvc.HandleReject))
+	dispatcher.Register("webrtc_stop", service.InboundHandlerFunc(screenshareSvc.HandleStop))
 	dispatcher.Register("voice_offer", service.InboundHandlerFunc(voiceSvc.HandleOffer))
 	dispatcher.Register("voice_answer", service.InboundHandlerFunc(voiceSvc.HandleAnswer))
 	dispatcher.Register("voice_ice", service.InboundHandlerFunc(voiceSvc.HandleICE))

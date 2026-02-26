@@ -95,22 +95,23 @@ func (a *App) ResolveInvite(token string) error {
 
 // ---- Screen Share -------------------------------------------------------
 
-// StartScreenShare initiates a screen share offer to peerID.
-func (a *App) StartScreenShare(peerID string) error {
-	return a.screenshare.StartShare(peerID)
+// SendScreenSignal envia qualquer sinal webrtc_* pelo WebSocket.
+// Chamado pelo frontend JS para offer, answer, ICE e stop.
+func (a *App) SendScreenSignal(peerID, msgType, payload string) error {
+	return a.screenshare.SendSignal(peerID, msgType, payload)
 }
 
-// AcceptScreenShare accepts an incoming screen share from peerID.
+// AcceptScreenShare aceita um screen share e registra o peer.
 func (a *App) AcceptScreenShare(peerID string) {
 	a.screenshare.AcceptShare(peerID)
 }
 
-// RejectScreenShare declines an incoming screen share from peerID.
+// RejectScreenShare rejeita um screen share.
 func (a *App) RejectScreenShare(peerID string) error {
 	return a.screenshare.RejectShare(peerID)
 }
 
-// StopScreenShare tears down the active screen share.
+// StopScreenShare encerra o screen share ativo.
 func (a *App) StopScreenShare() {
 	a.screenshare.StopShare()
 }

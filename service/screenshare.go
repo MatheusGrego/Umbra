@@ -1,6 +1,6 @@
 // Package service — screenshare.go
-// ScreenShareService manages WebRTC screen-sharing lifecycle.
-// It coordinates between the webrtc package, WS transport, and UI events.
+// ScreenShareService roteia mensagens de sinalização WS para screen share.
+// WebRTC (getDisplayMedia, RTCPeerConnection) vive no frontend JS.
 package service
 
 import (
@@ -8,120 +8,105 @@ import (
 	"log"
 	"sync"
 
-	"umbra/client/webrtc"
 	"umbra/client/ws"
 )
 
-// ScreenShareService manages screen sharing sessions.
+// ScreenShareService gerencia estado de sinalização de screen share.
 type ScreenShareService struct {
 	myUserID string
 	sender   Sender
 	emitter  EventEmitter
 
-	mu      sync.Mutex
-	session *webrtc.ScreenShare
-	peer    string // current peer being shared with/from
+	mu   sync.Mutex
+	peer string
 }
 
-// NewScreenShareService constructs a ScreenShareService.
+// NewScreenShareService constrói um ScreenShareService.
 func NewScreenShareService(myUserID string, sender Sender, emitter EventEmitter) *ScreenShareService {
-	return &ScreenShareService{
-		myUserID: myUserID,
-		sender:   sender,
-		emitter:  emitter,
-	}
+	return &ScreenShareService{myUserID: myUserID, sender: sender, emitter: emitter}
 }
 
-// ---- Outbound actions (called from Wails UI) ----------------------------
-
-// StartShare initiates a screen share offer to peerID.
-// The actual media capture happens via the WebRTC getDisplayMedia API on the frontend;
-// here we just set up the signalling and emit the event to prompt the receiver.
-func (s *ScreenShareService) StartShare(peerID string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	// Send offer signal to peer — the frontend will trigger getDisplayMedia
-	payload, _ := json.Marshal(map[string]string{"from": s.myUserID})
+// SendSignal envia qualquer envelope webrtc_* pelo WebSocket.
+func (s *ScreenShareService) SendSignal(peerID, msgType, payload string) error {
 	return s.sender.Send(ws.Envelope{
-		Type:    "webrtc_offer",
+		Type:    msgType,
 		From:    s.myUserID,
 		To:      peerID,
-		Payload: payload,
+		Payload: json.RawMessage(payload),
 	})
 }
 
-// AcceptShare accepts an incoming screen share offer from peerID.
+// AcceptShare registra o peer (estado local).
 func (s *ScreenShareService) AcceptShare(peerID string) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	s.peer = peerID
+	s.mu.Unlock()
 	s.emitter.Emit("screenshare:accepted", peerID)
 	log.Printf("[screenshare] accepted share from %s", peerID)
 }
 
-// RejectShare sends a rejection to peerID.
+// RejectShare envia rejeição ao peer.
 func (s *ScreenShareService) RejectShare(peerID string) error {
-	payload, _ := json.Marshal(map[string]string{"reason": "declined"})
-	return s.sender.Send(ws.Envelope{
-		Type:    "webrtc_reject",
-		From:    s.myUserID,
-		To:      peerID,
-		Payload: payload,
-	})
+	return s.SendSignal(peerID, "webrtc_reject", `{"reason":"declined"}`)
 }
 
-// StopShare tears down the active screen share session.
+// StopShare encerra sessão e notifica o peer.
 func (s *ScreenShareService) StopShare() {
 	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if s.session != nil {
-		s.session.Close()
-		s.session = nil
-	}
+	peer := s.peer
 	s.peer = ""
+	s.mu.Unlock()
+
+	if peer != "" {
+		_ = s.SendSignal(peer, "webrtc_stop", `{}`)
+	}
 	s.emitter.Emit("screenshare:stopped", nil)
 }
 
-// ---- Inbound handlers (called by dispatcher) ----------------------------
+// ---- Inbound handlers ---------------------------------------------------
 
-// HandleOffer processes an incoming webrtc_offer — shows confirmation UI.
+// HandleOffer — recebe webrtc_offer; emite screenshare:incoming com SDP para o JS.
 func (s *ScreenShareService) HandleOffer(env ws.Envelope) {
 	log.Printf("[screenshare] incoming offer from %s", env.From)
-	s.emitter.Emit("screenshare:incoming", env.From)
+	s.mu.Lock()
+	s.peer = env.From
+	s.mu.Unlock()
+	s.emitter.Emit("screenshare:incoming", map[string]interface{}{
+		"peer":    env.From,
+		"payload": string(env.Payload),
+	})
 }
 
-// HandleAnswer forwards a received SDP answer to the active session.
+// HandleAnswer — recebe webrtc_answer; emite screenshare:answer para o JS.
 func (s *ScreenShareService) HandleAnswer(env ws.Envelope) {
-	s.mu.Lock()
-	ss := s.session
-	s.mu.Unlock()
-
-	if ss != nil {
-		if err := ss.HandleAnswer(env); err != nil {
-			log.Printf("[screenshare] answer error: %v", err)
-		}
-	}
+	s.emitter.Emit("screenshare:answer", map[string]interface{}{
+		"peer":    env.From,
+		"payload": string(env.Payload),
+	})
 }
 
-// HandleICE forwards a received ICE candidate to the active session.
+// HandleICE — recebe webrtc_ice; emite screenshare:ice para o JS.
 func (s *ScreenShareService) HandleICE(env ws.Envelope) {
-	s.mu.Lock()
-	ss := s.session
-	s.mu.Unlock()
-
-	if ss != nil {
-		if err := ss.HandleICE(env); err != nil {
-			log.Printf("[screenshare] ICE error: %v", err)
-		}
-	}
+	s.emitter.Emit("screenshare:ice", map[string]interface{}{
+		"peer":    env.From,
+		"payload": string(env.Payload),
+	})
 }
 
-// HandleReject processes a screen share rejection from peer.
+// HandleReject — peer rejeitou o screen share.
 func (s *ScreenShareService) HandleReject(env ws.Envelope) {
 	log.Printf("[screenshare] rejected by %s", env.From)
-	s.StopShare()
+	s.mu.Lock()
+	s.peer = ""
+	s.mu.Unlock()
 	s.emitter.Emit("screenshare:rejected", env.From)
+}
+
+// HandleStop — peer encerrou o screen share.
+func (s *ScreenShareService) HandleStop(env ws.Envelope) {
+	log.Printf("[screenshare] stopped by %s", env.From)
+	s.mu.Lock()
+	s.peer = ""
+	s.mu.Unlock()
+	s.emitter.Emit("screenshare:stopped", nil)
 }

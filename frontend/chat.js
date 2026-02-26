@@ -111,6 +111,78 @@ class VoiceWebRTC {
   }
 }
 
+/* ─── ScreenWebRTC ───────────────────────────────────────────────── */
+class ScreenWebRTC {
+  #pc = null;
+  #displayStream = null;
+  #sendSignal;
+
+  constructor(sendSignal) { this.#sendSignal = sendSignal; }
+
+  async startShare(peerID) {
+    this.#displayStream = await navigator.mediaDevices.getDisplayMedia({
+      video: true, audio: false,
+    });
+    this.#pc = this.#createPC(peerID);
+    this.#displayStream.getTracks().forEach(t => this.#pc.addTrack(t, this.#displayStream));
+    // Se o usuário fechar o picker nativo do browser, para automaticamente
+    this.#displayStream.getVideoTracks()[0].onended = () => {
+      this.stop();
+      document.getElementById('screenshare-sender-bar')?.classList.add('hidden');
+    };
+    const offer = await this.#pc.createOffer();
+    await this.#pc.setLocalDescription(offer);
+    await this.#sendSignal(peerID, 'webrtc_offer',
+      JSON.stringify({ sdp: offer.sdp, type: offer.type }));
+  }
+
+  async acceptShare(peerID, sdpPayload) {
+    const { sdp, type } = JSON.parse(sdpPayload);
+    this.#pc = this.#createPC(peerID);
+    await this.#pc.setRemoteDescription({ type, sdp });
+    const answer = await this.#pc.createAnswer();
+    await this.#pc.setLocalDescription(answer);
+    await this.#sendSignal(peerID, 'webrtc_answer',
+      JSON.stringify({ sdp: answer.sdp, type: answer.type }));
+  }
+
+  async handleAnswer(sdpPayload) {
+    if (!this.#pc) return;
+    const { sdp, type } = JSON.parse(sdpPayload);
+    await this.#pc.setRemoteDescription({ type, sdp });
+  }
+
+  async handleICE(candidatePayload) {
+    if (!this.#pc) return;
+    try {
+      const c = JSON.parse(candidatePayload);
+      if (c?.candidate) await this.#pc.addIceCandidate(c);
+    } catch (e) { console.warn('[screenshare] ICE', e); }
+  }
+
+  stop() {
+    this.#displayStream?.getTracks().forEach(t => t.stop());
+    this.#pc?.close();
+    this.#pc = null;
+    this.#displayStream = null;
+  }
+
+  #createPC(peerID) {
+    const pc = new RTCPeerConnection({
+      iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
+    });
+    pc.onicecandidate = ({ candidate }) => {
+      if (candidate) this.#sendSignal(peerID, 'webrtc_ice', JSON.stringify(candidate))
+        .catch(console.warn);
+    };
+    pc.ontrack = ({ streams }) => {
+      const video = document.getElementById('screenshare-video');
+      if (video) video.srcObject = streams[0];
+    };
+    return pc;
+  }
+}
+
 /* ─── WailsBridge ────────────────────────────────────────────────────── */
 class WailsBridge {
   async getMyID() { return window.go?.main?.App?.GetMyID?.() ?? 'dev-0000000'; }
@@ -122,7 +194,9 @@ class WailsBridge {
   async createInvite() { return window.go?.main?.App?.CreateInvite?.(); }
   async resolveInvite(token) { return window.go?.main?.App?.ResolveInvite?.(token); }
   // Screen share
-  async startScreenShare(peer) { return window.go?.main?.App?.StartScreenShare?.(peer); }
+  async sendScreenSignal(peerID, msgType, payload) {
+    return window.go?.main?.App?.SendScreenSignal?.(peerID, msgType, payload);
+  }
   async acceptScreenShare(peer) { return window.go?.main?.App?.AcceptScreenShare?.(peer); }
   async rejectScreenShare(peer) { return window.go?.main?.App?.RejectScreenShare?.(peer); }
   async stopScreenShare() { return window.go?.main?.App?.StopScreenShare?.(); }
@@ -444,8 +518,9 @@ class ScreenShareUI {
     this.#openModal('modal-screenshare-confirm');
   }
 
-  showIncoming(peerID) {
-    document.getElementById('ss-incoming-peer').textContent = peerID;
+  showIncoming(peerID, sdpPayload = '') {
+    const el = document.getElementById('ss-incoming-peer');
+    if (el) { el.textContent = peerID; el.dataset.sdp = sdpPayload; }
     this.#openModal('modal-screenshare-incoming');
   }
 
@@ -469,6 +544,8 @@ class ScreenShareUI {
   #bindDOM() {
     document.getElementById('stop-screenshare-btn')
       ?.addEventListener('click', () => this.#bus.emit('screenshare:stop', null));
+    document.getElementById('screenshare-stop-btn')
+      ?.addEventListener('click', () => this.#bus.emit('screenshare:stop', null));
 
     // Sender confirm modal
     document.getElementById('ss-confirm-yes-btn')
@@ -481,8 +558,11 @@ class ScreenShareUI {
     // Receiver accept/reject
     document.getElementById('ss-accept-btn')
       ?.addEventListener('click', () => {
-        const peer = document.getElementById('ss-incoming-peer').textContent;
-        this.#bus.emit('screenshare:accept', peer);
+        const el = document.getElementById('ss-incoming-peer');
+        this.#bus.emit('screenshare:accept', {
+          peer: el?.textContent ?? '',
+          sdpPayload: el?.dataset?.sdp ?? '',
+        });
         document.getElementById('modal-backdrop').classList.add('hidden');
       });
     document.getElementById('ss-reject-btn')
@@ -731,7 +811,7 @@ class App {
   #store = new StateStore();
   #toast = new Toast();
   #settings;
-  #chatUI; #capsuleUI; #inviteUI; #screenShareUI; #voiceUI; #voiceWebRTC;
+  #chatUI; #capsuleUI; #inviteUI; #screenShareUI; #voiceUI; #voiceWebRTC; #screenWebRTC;
 
   async init() {
     this.#settings = new SettingsUI();  // aplica settings salvas antes de tudo
@@ -742,6 +822,9 @@ class App {
     this.#voiceUI = new VoiceUI(this.#bus);
     this.#voiceWebRTC = new VoiceWebRTC(
       (peerID, type, payload) => this.#bridge.sendVoiceSignal(peerID, type, payload)
+    );
+    this.#screenWebRTC = new ScreenWebRTC(
+      (peerID, type, payload) => this.#bridge.sendScreenSignal(peerID, type, payload)
     );
     this.#bindBus();
     this.#bindWails();
@@ -848,25 +931,36 @@ class App {
     this.#bus.on('screenshare:show-confirm', peer => {
       this.#screenShareUI.showConfirm(peer);
     });
-    this.#bus.on('screenshare:stop', async () => {
-      await this.#bridge.stopScreenShare();
-      this.#screenShareUI.hide();
-    });
+
     this.#bus.on('screenshare:confirm', async peer => {
       try {
-        await this.#bridge.startScreenShare(peer);
-        this.#toast.show('Screen share offer sent');
-      } catch (e) { this.#toast.show('Share failed: ' + errMsg(e)); }
+        await this.#screenWebRTC.startShare(peer);
+        document.getElementById('screenshare-sender-label').textContent =
+          `COMPARTILHANDO COM ${peer}`;
+        document.getElementById('screenshare-sender-bar')?.classList.remove('hidden');
+      } catch (e) {
+        this.#toast.show('Share failed: ' + errMsg(e));
+      }
     });
-    this.#bus.on('screenshare:accept', async peer => {
+
+    this.#bus.on('screenshare:accept', async ({ peer, sdpPayload }) => {
       try {
-        await this.#bridge.acceptScreenShare(peer);
+        this.#bridge.acceptScreenShare(peer);
         this.#screenShareUI.showReceiving(peer);
+        await this.#screenWebRTC.acceptShare(peer, sdpPayload);
       } catch (e) { this.#toast.show('Accept failed: ' + errMsg(e)); }
     });
+
     this.#bus.on('screenshare:reject', async peer => {
       try { await this.#bridge.rejectScreenShare(peer); }
       catch (e) { this.#toast.show('Reject failed: ' + errMsg(e)); }
+    });
+
+    this.#bus.on('screenshare:stop', async () => {
+      this.#screenWebRTC.stop();
+      await this.#bridge.stopScreenShare();
+      this.#screenShareUI.hide();
+      document.getElementById('screenshare-sender-bar')?.classList.add('hidden');
     });
 
     // ── Voice bus events ──
@@ -962,12 +1056,28 @@ class App {
     E('capsule:received', msg => this.#capsuleUI.showReceived(msg));
 
     // ── Screen share Wails events ──
-    E('screenshare:incoming', peer => this.#screenShareUI.showIncoming(peer));
+    E('screenshare:incoming', ({ peer, payload }) => {
+      this.#screenShareUI.showIncoming(peer, payload);
+    });
+    E('screenshare:answer', async ({ payload }) => {
+      await this.#screenWebRTC.handleAnswer(payload).catch(e =>
+        this.#toast.show('Screen answer error: ' + errMsg(e))
+      );
+    });
+    E('screenshare:ice', async ({ payload }) => {
+      await this.#screenWebRTC.handleICE(payload).catch(console.warn);
+    });
     E('screenshare:rejected', peer => {
       this.#screenShareUI.hide();
+      this.#screenWebRTC.stop();
+      document.getElementById('screenshare-sender-bar')?.classList.add('hidden');
       this.#toast.show(`${peer} declined screen share`);
     });
-    E('screenshare:stopped', () => this.#screenShareUI.hide());
+    E('screenshare:stopped', () => {
+      this.#screenShareUI.hide();
+      this.#screenWebRTC.stop();
+      document.getElementById('screenshare-sender-bar')?.classList.add('hidden');
+    });
 
     // ── Voice Wails events ──
     E('voice:incoming', ({ peer, payload }) => {

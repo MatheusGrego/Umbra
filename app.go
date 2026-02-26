@@ -117,29 +117,25 @@ func (a *App) StopScreenShare() {
 
 // ---- Voice Chat ---------------------------------------------------------
 
-// StartVoiceCall initiates a voice call offer to peerID.
-func (a *App) StartVoiceCall(peerID string) error {
-	return a.voice.StartCall(peerID)
+// SendVoiceSignal envia qualquer sinal voice_* pelo WebSocket.
+// Chamado pelo frontend JS para offer, answer, ICE, reject e hangup.
+func (a *App) SendVoiceSignal(peerID, msgType, payload string) error {
+	return a.voice.SendSignal(peerID, msgType, payload)
 }
 
-// AcceptVoiceCall accepts an incoming voice call from peerID.
+// AcceptVoiceCall registra o peer aceito (estado Go apenas).
 func (a *App) AcceptVoiceCall(peerID string) {
 	a.voice.AcceptCall(peerID)
 }
 
-// RejectVoiceCall declines an incoming voice call from peerID.
+// RejectVoiceCall envia rejeição ao peer.
 func (a *App) RejectVoiceCall(peerID string) error {
 	return a.voice.RejectCall(peerID)
 }
 
-// HangupVoice tears down the active voice call.
+// HangupVoice encerra a chamada ativa.
 func (a *App) HangupVoice() {
 	a.voice.Hangup()
-}
-
-// ToggleMute toggles voice call microphone mute state.
-func (a *App) ToggleMute() bool {
-	return a.voice.ToggleMute()
 }
 
 // ---- Peers --------------------------------------------------------------
